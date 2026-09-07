@@ -1,0 +1,1552 @@
+WEBVTT
+
+00:00:00.650 --> 00:00:05.272 line:86% position:50% size:85% align:center
+Mira has a shopping note: bread, milk. We want to import her name and
+
+00:00:05.272 --> 00:00:06.692 line:86% position:50% size:85% align:center
+her note into these two cells.
+
+00:00:08.166 --> 00:00:13.303 line:86% position:50% size:85% align:center
+The text above is C S V: comma separated values. Each cell is a
+
+00:00:13.303 --> 00:00:16.363 line:86% position:50% size:85% align:center
+field. A row of related fields is a record.
+
+00:00:17.818 --> 00:00:21.774 line:86% position:50% size:85% align:center
+Let's try the obvious solution. Split the text whenever we see a
+
+00:00:21.774 --> 00:00:25.634 line:86% position:50% size:85% align:center
+comma. There. One piece, two pieces, three pieces.
+
+00:00:27.135 --> 00:00:31.232 line:86% position:50% size:85% align:center
+Wait, three? The note has been cut in half. Bread and milk were
+
+00:00:31.232 --> 00:00:33.172 line:86% position:50% size:85% align:center
+supposed to stay together in one cell.
+
+00:00:34.489 --> 00:00:39.149 line:86% position:50% size:85% align:center
+Look at the two commas. Same character. Different jobs. The first
+
+00:00:39.149 --> 00:00:42.309 line:86% position:50% size:85% align:center
+separates fields. The second belongs to the note.
+
+00:00:43.687 --> 00:00:47.534 line:86% position:50% size:85% align:center
+The quotes tell us which is which. They surround a field whose
+
+00:00:47.534 --> 00:00:49.394 line:86% position:50% size:85% align:center
+contents are allowed to include a comma.
+
+00:00:50.808 --> 00:00:55.420 line:86% position:50% size:85% align:center
+Our job is to recover the two original values, keeping the comma in
+
+00:00:55.420 --> 00:00:57.720 line:86% position:50% size:85% align:center
+the note and leaving out the surrounding quotes.
+
+00:00:59.850 --> 00:01:03.754 line:86% position:50% size:85% align:center
+We'll build that reader together in Rust, one working case at a time.
+
+00:01:04.474 --> 00:01:06.574 line:86% position:50% size:85% align:center
+You can follow the whole film without typing.
+
+00:01:07.978 --> 00:01:11.900 line:86% position:50% size:85% align:center
+First, we'll make fields and records. Then we'll see what quotes
+
+00:01:11.900 --> 00:01:15.380 line:86% position:50% size:85% align:center
+change, including a quote that belongs inside the text.
+
+00:01:16.795 --> 00:01:21.312 line:86% position:50% size:85% align:center
+Finally, the input will arrive in pieces. We'll keep the same answers
+
+00:01:21.312 --> 00:01:24.072 line:86% position:50% size:85% align:center
+even when a piece ends at an awkward spot.
+
+00:01:25.507 --> 00:01:29.344 line:86% position:50% size:85% align:center
+Every time we need a new decision, we'll add the small piece of Rust
+
+00:01:29.344 --> 00:01:32.044 line:86% position:50% size:85% align:center
+that makes it, and run the same example.
+
+00:01:33.385 --> 00:01:37.558 line:86% position:50% size:85% align:center
+The source links include working checkpoints. Pause at a checkpoint
+
+00:01:37.558 --> 00:01:41.878 line:86% position:50% size:85% align:center
+if you'd like to build along; the next explanation won't depend on
+
+00:01:41.878 --> 00:01:42.498 line:86% position:50% size:85% align:center
+doing homework.
+
+00:01:46.085 --> 00:01:50.570 line:86% position:50% size:85% align:center
+This reader has a stated set of rules. It reads UTF eight text,
+
+00:01:51.310 --> 00:01:55.430 line:86% position:50% size:85% align:center
+accepts line feed or carriage return plus line feed between records,
+
+00:01:56.190 --> 00:01:57.690 line:86% position:50% size:85% align:center
+and reports malformed quoting.
+
+00:01:59.117 --> 00:02:03.243 line:86% position:50% size:85% align:center
+We'll introduce those details when they change a decision. For now,
+
+00:02:03.663 --> 00:02:06.023 line:86% position:50% size:85% align:center
+let's earn our first field with just four letters.
+
+00:02:08.183 --> 00:02:13.180 line:86% position:50% size:85% align:center
+Start with Mira. No comma yet. The answer is one field containing the
+
+00:02:13.180 --> 00:02:14.760 line:86% position:50% size:85% align:center
+four letters we can already see.
+
+00:02:16.141 --> 00:02:19.716 line:86% position:50% size:85% align:center
+But the program receives a sequence, so it needs somewhere to keep
+
+00:02:19.716 --> 00:02:22.676 line:86% position:50% size:85% align:center
+the part it has read. Start an empty field.
+
+00:02:24.049 --> 00:02:29.535 line:86% position:50% size:85% align:center
+Take M. Keep it. Take i, then r, then a. Each new byte joins the same
+
+00:02:29.535 --> 00:02:30.535 line:86% position:50% size:85% align:center
+unfinished field.
+
+00:02:31.982 --> 00:02:36.725 line:86% position:50% size:85% align:center
+This becomes a vector of bytes in Rust. A vector can grow. Each push
+
+00:02:36.725 --> 00:02:38.285 line:86% position:50% size:85% align:center
+appends one byte to its end.
+
+00:02:39.693 --> 00:02:43.790 line:86% position:50% size:85% align:center
+The loop borrows the input slice and visits its bytes. The little
+
+00:02:43.790 --> 00:02:47.270 line:86% position:50% size:85% align:center
+ampersand in the pattern gives us the byte value to push.
+
+00:02:48.679 --> 00:02:53.082 line:86% position:50% size:85% align:center
+When the input really ends, the field is complete. These four bytes
+
+00:02:53.082 --> 00:02:56.482 line:86% position:50% size:85% align:center
+form the string Mira. Now we can return that value.
+
+00:02:57.858 --> 00:03:03.045 line:86% position:50% size:85% align:center
+Try Noah instead. The letters changed, but the operation didn't. We
+
+00:03:03.045 --> 00:03:06.685 line:86% position:50% size:85% align:center
+accumulate content until something tells us the field is finished.
+
+00:03:08.817 --> 00:03:13.978 line:86% position:50% size:85% align:center
+Now add a comma and tea. We want two fields in the same record. The
+
+00:03:13.978 --> 00:03:16.438 line:86% position:50% size:85% align:center
+comma itself is not part of either value.
+
+00:03:17.775 --> 00:03:21.753 line:86% position:50% size:85% align:center
+Read Mira as before. When we reach the comma, the field has
+
+00:03:21.753 --> 00:03:24.493 line:86% position:50% size:85% align:center
+everything it needs. We can close that cell.
+
+00:03:25.857 --> 00:03:29.172 line:86% position:50% size:85% align:center
+Put the finished string into the current record, then start an empty
+
+00:03:29.172 --> 00:03:32.312 line:86% position:50% size:85% align:center
+field for tea. Keep the record right here.
+
+00:03:33.620 --> 00:03:37.878 line:86% position:50% size:85% align:center
+In Rust, the record is another vector. Its elements are strings,
+
+00:03:37.878 --> 00:03:42.018 line:86% position:50% size:85% align:center
+because it holds complete field values rather than individual bytes.
+
+00:03:43.531 --> 00:03:47.136 line:86% position:50% size:85% align:center
+Memory take moves the current vector out and leaves an empty one
+
+00:03:47.136 --> 00:03:51.796 line:86% position:50% size:85% align:center
+behind. We can reuse the field variable without copying its whole
+
+00:03:51.796 --> 00:03:52.276 line:86% position:50% size:85% align:center
+contents.
+
+00:03:53.810 --> 00:03:58.190 line:86% position:50% size:85% align:center
+Convert the bytes into a string, then push it into the record. The
+
+00:03:58.190 --> 00:04:01.490 line:86% position:50% size:85% align:center
+question mark passes any conversion error back to the caller.
+
+00:04:02.910 --> 00:04:07.614 line:86% position:50% size:85% align:center
+At final end of input, finish tea as well. There was no comma after
+
+00:04:07.614 --> 00:04:10.434 line:86% position:50% size:85% align:center
+it, so the end itself supplies the finishing event.
+
+00:04:12.517 --> 00:04:17.152 line:86% position:50% size:85% align:center
+Add a second shopper on a new line. L F labels the line-break byte on
+
+00:04:17.152 --> 00:04:20.112 line:86% position:50% size:85% align:center
+screen. Each shopper needs a separate record.
+
+00:04:21.525 --> 00:04:25.717 line:86% position:50% size:85% align:center
+The first comma still finishes Mira. The line break arrives after
+
+00:04:25.717 --> 00:04:28.597 line:86% position:50% size:85% align:center
+tea, while tea is still in the field we are building.
+
+00:04:29.999 --> 00:04:34.835 line:86% position:50% size:85% align:center
+So a record boundary first finishes that last field. Only then is the
+
+00:04:34.835 --> 00:04:36.535 line:86% position:50% size:85% align:center
+whole record ready to hand over.
+
+00:04:37.858 --> 00:04:42.767 line:86% position:50% size:85% align:center
+Move the completed row out. Start an empty record. Noah and milk will
+
+00:04:42.767 --> 00:04:45.630 line:86% position:50% size:85% align:center
+go into that new record, not into Mira's.
+
+00:04:46.630 --> 00:04:51.273 line:86% position:50% size:85% align:center
+These repeated actions deserve names: end field, and end record.
+
+00:04:52.313 --> 00:04:55.653 line:86% position:50% size:85% align:center
+Each name stands for one job we already understand visually.
+
+00:04:57.104 --> 00:05:01.649 line:86% position:50% size:85% align:center
+Notice their boundary. End field doesn't decide whether a comma was
+
+00:05:01.649 --> 00:05:06.129 line:86% position:50% size:85% align:center
+allowed. It packages the field after the scanning logic makes that
+
+00:05:06.129 --> 00:05:06.529 line:86% position:50% size:85% align:center
+decision.
+
+00:05:08.020 --> 00:05:12.236 line:86% position:50% size:85% align:center
+Replace tea with coffee. Nothing about record handling changes.
+
+00:05:13.216 --> 00:05:16.656 line:86% position:50% size:85% align:center
+Separate the decision about a boundary from the work performed when
+
+00:05:16.656 --> 00:05:17.236 line:86% position:50% size:85% align:center
+one is found.
+
+00:05:19.350 --> 00:05:23.601 line:86% position:50% size:85% align:center
+What should this trailing comma mean? Mira has a second field, but
+
+00:05:23.601 --> 00:05:27.441 line:86% position:50% size:85% align:center
+there is no text in it. The answer includes an empty string.
+
+00:05:28.867 --> 00:05:32.637 line:86% position:50% size:85% align:center
+The field builder is already empty. We still finish it when the
+
+00:05:32.637 --> 00:05:35.417 line:86% position:50% size:85% align:center
+record ends, so the empty cell keeps its place.
+
+00:05:36.849 --> 00:05:41.642 line:86% position:50% size:85% align:center
+On the next line, the comma comes first. Same operation. Finish an
+
+00:05:41.642 --> 00:05:44.562 line:86% position:50% size:85% align:center
+empty first field, then read tea into the second.
+
+00:05:45.947 --> 00:05:50.873 line:86% position:50% size:85% align:center
+A blank line represents one record containing one empty field. It has
+
+00:05:50.873 --> 00:05:54.013 line:86% position:50% size:85% align:center
+a record boundary, even though it has no field text.
+
+00:05:55.480 --> 00:05:59.849 line:86% position:50% size:85% align:center
+A completely empty file is a different case. In this reader, it
+
+00:05:59.849 --> 00:06:03.049 line:86% position:50% size:85% align:center
+produces no records. We haven't started a record at all.
+
+00:06:04.415 --> 00:06:08.701 line:86% position:50% size:85% align:center
+And a line break after a completed record does not create an extra
+
+00:06:08.701 --> 00:06:12.181 line:86% position:50% size:85% align:center
+imaginary row. There must be a new record to finish.
+
+00:06:13.650 --> 00:06:18.378 line:86% position:50% size:85% align:center
+That's our plain-text checkpoint: content fills a field, a comma
+
+00:06:18.378 --> 00:06:22.758 line:86% position:50% size:85% align:center
+closes a field, and a record boundary closes the last field and the
+
+00:06:22.758 --> 00:06:23.038 line:86% position:50% size:85% align:center
+record.
+
+00:06:27.150 --> 00:06:32.123 line:86% position:50% size:85% align:center
+Now return to the input that broke our split. Mira is ordinary. The
+
+00:06:32.123 --> 00:06:33.523 line:86% position:50% size:85% align:center
+next field starts with a quote.
+
+00:06:34.914 --> 00:06:39.365 line:86% position:50% size:85% align:center
+Opening that quote changes how we read the field. The contour marks
+
+00:06:39.365 --> 00:06:41.605 line:86% position:50% size:85% align:center
+the part we're reading as quoted contents.
+
+00:06:43.174 --> 00:06:47.908 line:86% position:50% size:85% align:center
+Bread goes into the field. Then comes the comma. We're still inside
+
+00:06:47.908 --> 00:06:51.348 line:86% position:50% size:85% align:center
+the quoted field, so this comma goes into the contents too.
+
+00:06:52.746 --> 00:06:56.819 line:86% position:50% size:85% align:center
+At the closing quote, we stop reading quoted contents. The
+
+00:06:56.819 --> 00:07:00.459 line:86% position:50% size:85% align:center
+surrounding quotes describe the format; they aren't copied into the
+
+00:07:00.459 --> 00:07:00.839 line:86% position:50% size:85% align:center
+value.
+
+00:07:02.210 --> 00:07:07.157 line:86% position:50% size:85% align:center
+We finish with two cells. Mira, and bread comma milk. The inner comma
+
+00:07:07.157 --> 00:07:09.117 line:86% position:50% size:85% align:center
+has reached the exact place it belongs.
+
+00:07:10.713 --> 00:07:15.285 line:86% position:50% size:85% align:center
+Our first version can remember inside quotes with a boolean. The
+
+00:07:15.285 --> 00:07:18.885 line:86% position:50% size:85% align:center
+comma branch only separates fields when that boolean is false.
+
+00:07:20.419 --> 00:07:24.562 line:86% position:50% size:85% align:center
+Remove the quotes around bread and milk, and the inner comma becomes
+
+00:07:24.562 --> 00:07:28.802 line:86% position:50% size:85% align:center
+a separator again. Punctuation gets its job from context.
+
+00:07:31.050 --> 00:07:35.885 line:86% position:50% size:85% align:center
+Suppose the note has two lines: top, then bottom. That's still one
+
+00:07:35.885 --> 00:07:38.785 line:86% position:50% size:85% align:center
+shopper and one note, so it must remain one record.
+
+00:07:40.298 --> 00:07:44.771 line:86% position:50% size:85% align:center
+The line break arrives while the field is quoted. Watch the cell grow
+
+00:07:44.771 --> 00:07:49.131 line:86% position:50% size:85% align:center
+vertically. Bottom belongs below top inside that same cell.
+
+00:07:50.474 --> 00:07:54.269 line:86% position:50% size:85% align:center
+After the closing quote, another line break arrives. This one
+
+00:07:54.269 --> 00:07:58.009 line:86% position:50% size:85% align:center
+finishes the record. Same byte, different context again.
+
+00:07:59.423 --> 00:08:02.695 line:86% position:50% size:85% align:center
+We don't need a special rule for every allowed content character.
+
+00:08:03.455 --> 00:08:07.295 line:86% position:50% size:85% align:center
+Inside quotes, an ordinary byte is simply added to the field.
+
+00:08:08.713 --> 00:08:12.806 line:86% position:50% size:85% align:center
+That's a useful abstraction we've earned. Quoted content is one
+
+00:08:12.806 --> 00:08:17.186 line:86% position:50% size:85% align:center
+category. The only byte needing a new decision inside it is a quote.
+
+00:08:18.599 --> 00:08:22.130 line:86% position:50% size:85% align:center
+A comma, a space, and a line break all travel through the content
+
+00:08:22.130 --> 00:08:26.050 line:86% position:50% size:85% align:center
+path here. Their shapes differ; their job is the same.
+
+00:08:27.430 --> 00:08:31.128 line:86% position:50% size:85% align:center
+Our second working agreement is simple: inside quotes, preserve
+
+00:08:31.128 --> 00:08:36.108 line:86% position:50% size:85% align:center
+contents. Outside quotes, separators can finish fields and records.
+
+00:08:37.028 --> 00:08:38.628 line:86% position:50% size:85% align:center
+Now let's challenge the quote itself.
+
+00:08:42.850 --> 00:08:47.136 line:86% position:50% size:85% align:center
+Before adding escapes, pin down where quoting starts. In our rules,
+
+00:08:47.536 --> 00:08:50.076 line:86% position:50% size:85% align:center
+an opening quote must be the first byte of a field.
+
+00:08:51.459 --> 00:08:55.602 line:86% position:50% size:85% align:center
+Here the comma finished Mira. The next field is empty and hasn't
+
+00:08:55.602 --> 00:08:58.562 line:86% position:50% size:85% align:center
+started. A quote here can open quoted contents.
+
+00:09:00.177 --> 00:09:04.865 line:86% position:50% size:85% align:center
+But in tea quote time, we've already started a bare field. That quote
+
+00:09:04.865 --> 00:09:08.585 line:86% position:50% size:85% align:center
+cannot quietly change the interpretation of its earlier letters.
+
+00:09:10.082 --> 00:09:14.443 line:86% position:50% size:85% align:center
+We report a quote in a bare field, at this source byte. The malformed
+
+00:09:14.443 --> 00:09:17.223 line:86% position:50% size:85% align:center
+current record won't be handed to the application.
+
+00:09:18.786 --> 00:09:23.678 line:86% position:50% size:85% align:center
+Spaces also count as contents. A space before a quote has already
+
+00:09:23.678 --> 00:09:27.698 line:86% position:50% size:85% align:center
+started a bare field. This reader doesn't secretly trim it away.
+
+00:09:29.088 --> 00:09:32.729 line:86% position:50% size:85% align:center
+These are format decisions, not guesses about what the writer
+
+00:09:32.729 --> 00:09:37.669 line:86% position:50% size:85% align:center
+intended. A stated rule gives us a clear result and a clear error.
+
+00:09:39.078 --> 00:09:43.059 line:86% position:50% size:85% align:center
+A field beginning with two quotes is different: it can be an empty
+
+00:09:43.059 --> 00:09:46.999 line:86% position:50% size:85% align:center
+quoted field. There was no bare content before the opening quote.
+
+00:09:49.017 --> 00:09:53.859 line:86% position:50% size:85% align:center
+Noah's note is say, then hi in quotation marks. We want those inner
+
+00:09:53.859 --> 00:09:56.619 line:86% position:50% size:85% align:center
+quote characters to survive in the field value.
+
+00:09:57.976 --> 00:10:02.972 line:86% position:50% size:85% align:center
+C S V writes a content quote as two consecutive quotes inside the
+
+00:10:02.972 --> 00:10:06.552 line:86% position:50% size:85% align:center
+quoted field. These two source marks represent one character.
+
+00:10:08.092 --> 00:10:12.195 line:86% position:50% size:85% align:center
+Read the first mark of the pair. If we immediately declare the field
+
+00:10:12.195 --> 00:10:14.775 line:86% position:50% size:85% align:center
+closed, the second quote becomes a problem.
+
+00:10:16.191 --> 00:10:20.540 line:86% position:50% size:85% align:center
+Instead, inspect the next byte. It's another quote. That tells us
+
+00:10:20.540 --> 00:10:23.780 line:86% position:50% size:85% align:center
+this pair belongs to the contents, not the field boundary.
+
+00:10:25.253 --> 00:10:29.550 line:86% position:50% size:85% align:center
+Bring the two marks together. Append one quote. Then keep reading the
+
+00:10:29.550 --> 00:10:32.050 line:86% position:50% size:85% align:center
+same field. The h and i come next.
+
+00:10:33.503 --> 00:10:38.030 line:86% position:50% size:85% align:center
+The pair after hi works exactly the same way. It adds the second
+
+00:10:38.030 --> 00:10:40.730 line:86% position:50% size:85% align:center
+content quote, the one after hi in the note.
+
+00:10:42.103 --> 00:10:47.473 line:86% position:50% size:85% align:center
+One final quote remains. It closes the field. Three adjacent marks
+
+00:10:47.473 --> 00:10:50.873 line:86% position:50% size:85% align:center
+can be a doubled content quote followed by a closing quote.
+
+00:10:52.917 --> 00:10:57.089 line:86% position:50% size:85% align:center
+Let's slow down the decision at one quote. We've read tea inside a
+
+00:10:57.089 --> 00:10:59.649 line:86% position:50% size:85% align:center
+quoted field and now reached a quote mark.
+
+00:11:01.081 --> 00:11:05.054 line:86% position:50% size:85% align:center
+If the following byte is another quote, keep one quote in the text
+
+00:11:05.054 --> 00:11:07.214 line:86% position:50% size:85% align:center
+and continue reading quoted contents.
+
+00:11:08.785 --> 00:11:12.860 line:86% position:50% size:85% align:center
+If it's a comma, the quote we just saw was the closing quote. Finish
+
+00:11:12.860 --> 00:11:14.900 line:86% position:50% size:85% align:center
+tea, then begin the next field.
+
+00:11:16.338 --> 00:11:20.805 line:86% position:50% size:85% align:center
+A record ending can finish the record. Final end of input can finish
+
+00:11:20.805 --> 00:11:24.265 line:86% position:50% size:85% align:center
+the last field. Those are legal ways to complete it.
+
+00:11:25.558 --> 00:11:30.368 line:86% position:50% size:85% align:center
+But an x right after the closing quote has no job in this format. It
+
+00:11:30.368 --> 00:11:32.968 line:86% position:50% size:85% align:center
+is neither an escaped quote nor a separator.
+
+00:11:34.297 --> 00:11:38.904 line:86% position:50% size:85% align:center
+Report that x as an unexpected character after a quote. We don't
+
+00:11:38.904 --> 00:11:41.664 line:86% position:50% size:85% align:center
+discard it, and we don't quietly merge it into tea.
+
+00:11:43.109 --> 00:11:47.324 line:86% position:50% size:85% align:center
+So a quote doesn't answer the whole question by itself. The next byte
+
+00:11:47.324 --> 00:11:51.584 line:86% position:50% size:85% align:center
+decides which interpretation fits. That's the context we must
+
+00:11:51.584 --> 00:11:52.004 line:86% position:50% size:85% align:center
+preserve.
+
+00:11:54.250 --> 00:11:58.308 line:86% position:50% size:85% align:center
+With the entire input in memory, our checkpoint can peek at the next
+
+00:11:58.308 --> 00:12:01.548 line:86% position:50% size:85% align:center
+byte. That lets us handle the doubled quote directly.
+
+00:12:03.094 --> 00:12:07.049 line:86% position:50% size:85% align:center
+Peek observes the next byte without consuming it. If it is another
+
+00:12:07.049 --> 00:12:10.669 line:86% position:50% size:85% align:center
+quote, we consume that second mark and append one quote.
+
+00:12:12.038 --> 00:12:17.146 line:86% position:50% size:85% align:center
+Run Noah's note. The pair before hi becomes one mark, the pair after
+
+00:12:17.146 --> 00:12:20.586 line:86% position:50% size:85% align:center
+hi becomes another, and the final mark closes the field.
+
+00:12:21.984 --> 00:12:25.534 line:86% position:50% size:85% align:center
+Now put a delivery boundary between the two marks in the first pair.
+
+00:12:26.434 --> 00:12:29.054 line:86% position:50% size:85% align:center
+The current piece ends just after the first quote.
+
+00:12:30.429 --> 00:12:35.665 line:86% position:50% size:85% align:center
+Peek has no byte to show. But the file hasn't necessarily ended. Its
+
+00:12:35.665 --> 00:12:38.565 line:86% position:50% size:85% align:center
+next piece may begin with exactly the quote we need.
+
+00:12:39.952 --> 00:12:43.931 line:86% position:50% size:85% align:center
+We can't decide that the field is closed just because this piece is
+
+00:12:43.931 --> 00:12:47.311 line:86% position:50% size:85% align:center
+empty. And we can't forget the letters already collected.
+
+00:12:48.784 --> 00:12:53.511 line:86% position:50% size:85% align:center
+The complete-input version has taught us the decision. To stream, we
+
+00:12:53.511 --> 00:12:57.211 line:86% position:50% size:85% align:center
+need to preserve an unanswered decision until more input arrives.
+
+00:13:01.483 --> 00:13:05.307 line:86% position:50% size:85% align:center
+Keep the same source. We have Noah in the record and say in the
+
+00:13:05.307 --> 00:13:08.867 line:86% position:50% size:85% align:center
+unfinished note. The first quote of the pair has arrived.
+
+00:13:10.408 --> 00:13:14.294 line:86% position:50% size:85% align:center
+The chunk ends here. Leave the record and field exactly where they
+
+00:13:14.294 --> 00:13:17.194 line:86% position:50% size:85% align:center
+are. Only the available input has run out.
+
+00:13:18.586 --> 00:13:23.461 line:86% position:50% size:85% align:center
+We also need one fact: we saw a quote inside quoted contents, and the
+
+00:13:23.461 --> 00:13:25.061 line:86% position:50% size:85% align:center
+next byte must tell us what it means.
+
+00:13:26.553 --> 00:13:31.152 line:86% position:50% size:85% align:center
+Give that situation a name: Quote Seen. The name records a question
+
+00:13:31.152 --> 00:13:35.312 line:86% position:50% size:85% align:center
+still waiting for an answer. It doesn't mean the field is finished.
+
+00:13:36.777 --> 00:13:41.720 line:86% position:50% size:85% align:center
+Here comes the next chunk. Its first byte is another quote. Now we
+
+00:13:41.720 --> 00:13:44.940 line:86% position:50% size:85% align:center
+can resolve the question without rereading the earlier text.
+
+00:13:46.397 --> 00:13:50.093 line:86% position:50% size:85% align:center
+The pair contributes one quote to the field. Switch back to reading
+
+00:13:50.093 --> 00:13:54.293 line:86% position:50% size:85% align:center
+quoted contents, ready for h, i, and whatever follows.
+
+00:13:55.771 --> 00:14:00.218 line:86% position:50% size:85% align:center
+We kept exactly the information needed for the next decision. Chunk
+
+00:14:00.218 --> 00:14:03.778 line:86% position:50% size:85% align:center
+boundaries can move; the meaning of the bytes stays the same.
+
+00:14:05.817 --> 00:14:09.997 line:86% position:50% size:85% align:center
+What other situations must survive between bytes? Before any content
+
+00:14:09.997 --> 00:14:14.077 line:86% position:50% size:85% align:center
+in a field, we're at Start. An opening quote is allowed here.
+
+00:14:15.381 --> 00:14:20.413 line:86% position:50% size:85% align:center
+After ordinary unquoted content begins, we're in Bare. Commas and
+
+00:14:20.413 --> 00:14:23.933 line:86% position:50% size:85% align:center
+record endings can finish it, but a quote here is an error.
+
+00:14:25.343 --> 00:14:29.756 line:86% position:50% size:85% align:center
+After an opening quote, we're in Quoted. Commas and line breaks are
+
+00:14:29.756 --> 00:14:32.696 line:86% position:50% size:85% align:center
+content. A quote takes us to the pending decision.
+
+00:14:34.157 --> 00:14:38.933 line:86% position:50% size:85% align:center
+That pending situation is Quote Seen. Another quote adds one content
+
+00:14:38.933 --> 00:14:42.533 line:86% position:50% size:85% align:center
+quote; a legal separator closes the field or record.
+
+00:14:43.961 --> 00:14:48.655 line:86% position:50% size:85% align:center
+These are alternatives, so Rust gives us an enum. The state variable
+
+00:14:48.655 --> 00:14:52.815 line:86% position:50% size:85% align:center
+holds one variant at a time, matching our one current situation.
+
+00:14:54.460 --> 00:14:59.086 line:86% position:50% size:85% align:center
+We didn't start by inventing four boxes. Each variant preserves a
+
+00:14:59.086 --> 00:15:02.546 line:86% position:50% size:85% align:center
+distinction that changed what the next byte was allowed to do.
+
+00:15:03.880 --> 00:15:08.081 line:86% position:50% size:85% align:center
+Compare an empty bare field with an empty quoted field. Their text
+
+00:15:08.081 --> 00:15:13.381 line:86% position:50% size:85% align:center
+can be identical, but their next legal actions differ. Contents alone
+
+00:15:13.381 --> 00:15:14.201 line:86% position:50% size:85% align:center
+aren't enough.
+
+00:15:16.283 --> 00:15:19.703 line:86% position:50% size:85% align:center
+Our local variables used to disappear when the parsing function
+
+00:15:19.703 --> 00:15:24.243 line:86% position:50% size:85% align:center
+returned. But waiting for another chunk must not erase unfinished
+
+00:15:24.243 --> 00:15:24.903 line:86% position:50% size:85% align:center
+work.
+
+00:15:26.276 --> 00:15:30.916 line:86% position:50% size:85% align:center
+Put the state, field bytes, and current record into a Decoder. This
+
+00:15:30.916 --> 00:15:32.996 line:86% position:50% size:85% align:center
+struct keeps them together across calls.
+
+00:15:34.496 --> 00:15:39.307 line:86% position:50% size:85% align:center
+Its push method accepts one byte; u eight is Rust's one-byte integer.
+
+00:15:40.327 --> 00:15:43.507 line:86% position:50% size:85% align:center
+The mutable borrow lets this call update the decoder's unfinished
+
+00:15:43.507 --> 00:15:44.187 line:86% position:50% size:85% align:center
+work.
+
+00:15:45.552 --> 00:15:49.946 line:86% position:50% size:85% align:center
+Most bytes don't complete a record. After an ordinary letter, push
+
+00:15:49.946 --> 00:15:54.586 line:86% position:50% size:85% align:center
+returns a successful result containing None: no record ready yet.
+
+00:15:55.914 --> 00:16:00.446 line:86% position:50% size:85% align:center
+At a record boundary, it returns Some with the completed record. The
+
+00:16:00.446 --> 00:16:03.946 line:86% position:50% size:85% align:center
+record moves out; the decoder is ready to build the next one.
+
+00:16:05.258 --> 00:16:09.585 line:86% position:50% size:85% align:center
+A malformed byte returns an error instead. Result separates success
+
+00:16:09.585 --> 00:16:14.765 line:86% position:50% size:85% align:center
+from failure. Inside success, Option separates a ready record
+
+00:16:14.765 --> 00:16:16.085 line:86% position:50% size:85% align:center
+from unfinished work.
+
+00:16:17.458 --> 00:16:21.965 line:86% position:50% size:85% align:center
+This is our core's boundary: one byte in, a state update, and
+
+00:16:21.965 --> 00:16:26.245 line:86% position:50% size:85% align:center
+possibly one complete record out. It needs no file handle or
+
+00:16:26.245 --> 00:16:27.285 line:86% position:50% size:85% align:center
+application schema.
+
+00:16:29.350 --> 00:16:34.018 line:86% position:50% size:85% align:center
+Run the original shopping note through this decoder. After Mira and
+
+00:16:34.018 --> 00:16:37.218 line:86% position:50% size:85% align:center
+the separating comma, we're at Start for the second field.
+
+00:16:38.636 --> 00:16:42.509 line:86% position:50% size:85% align:center
+A quote at Start switches to Quoted. It doesn't push a quote into the
+
+00:16:42.509 --> 00:16:46.069 line:86% position:50% size:85% align:center
+field. It only changes how following bytes will be read.
+
+00:16:47.474 --> 00:16:51.836 line:86% position:50% size:85% align:center
+In Quoted, bread, the comma, the space, and milk all take the content
+
+00:16:51.836 --> 00:16:55.576 line:86% position:50% size:85% align:center
+path. Watch the current line and the growing cell together.
+
+00:16:56.901 --> 00:17:01.712 line:86% position:50% size:85% align:center
+The next quote switches to Quote Seen. It adds no content yet. At
+
+00:17:01.712 --> 00:17:05.072 line:86% position:50% size:85% align:center
+final end of input, that quote can legally close the field.
+
+00:17:06.470 --> 00:17:10.382 line:86% position:50% size:85% align:center
+Rust's match selects the arm for the current state. An if guard
+
+00:17:10.382 --> 00:17:14.222 line:86% position:50% size:85% align:center
+narrows an arm to a particular next byte, such as another quote.
+
+00:17:15.620 --> 00:17:19.757 line:86% position:50% size:85% align:center
+Once the special quote cases are handled, the common separator branch
+
+00:17:19.757 --> 00:17:24.037 line:86% position:50% size:85% align:center
+can finish a field or record. That work doesn't need to be
+
+00:17:24.037 --> 00:17:24.637 line:86% position:50% size:85% align:center
+duplicated.
+
+00:17:26.018 --> 00:17:30.704 line:86% position:50% size:85% align:center
+We now have a byte-driven decoder. Feed the same input in one piece
+
+00:17:30.704 --> 00:17:34.704 line:86% position:50% size:85% align:center
+or several pieces; keep the decoder, and it keeps the decisions
+
+00:17:34.704 --> 00:17:35.564 line:86% position:50% size:85% align:center
+consistent.
+
+00:17:39.817 --> 00:17:44.175 line:86% position:50% size:85% align:center
+Consider this unfinished quoted note. We've read tea, but there is no
+
+00:17:44.175 --> 00:17:47.055 line:86% position:50% size:85% align:center
+closing quote. Now the current chunk ends.
+
+00:17:48.537 --> 00:17:52.913 line:86% position:50% size:85% align:center
+Nothing is wrong yet. More bytes may arrive. Keep the Quoted state
+
+00:17:52.913 --> 00:17:55.313 line:86% position:50% size:85% align:center
+and the text tea, and wait for the next piece.
+
+00:17:56.746 --> 00:18:00.731 line:86% position:50% size:85% align:center
+Now change just one fact: the input source says this is the final
+
+00:18:00.731 --> 00:18:04.851 line:86% position:50% size:85% align:center
+end. No more bytes will arrive. The closing quote is missing.
+
+00:18:06.402 --> 00:18:11.151 line:86% position:50% size:85% align:center
+The finish method reports an unclosed quote. It points to the final
+
+00:18:11.151 --> 00:18:14.791 line:86% position:50% size:85% align:center
+byte position, where the missing continuation became certain.
+
+00:18:16.217 --> 00:18:20.190 line:86% position:50% size:85% align:center
+If the state had been Quote Seen instead, a closing quote was already
+
+00:18:20.190 --> 00:18:24.330 line:86% position:50% size:85% align:center
+available. Final end could finish that field and its record.
+
+00:18:25.768 --> 00:18:30.534 line:86% position:50% size:85% align:center
+A bare field can also finish at final end. A file does not need a
+
+00:18:30.534 --> 00:18:33.594 line:86% position:50% size:85% align:center
+line break after its last record in our chosen rules.
+
+00:18:35.073 --> 00:18:39.142 line:86% position:50% size:85% align:center
+So push means here's a byte, and finish means there will never be
+
+00:18:39.142 --> 00:18:43.062 line:86% position:50% size:85% align:center
+another one. Don't use finish to mean please wait for the next chunk.
+
+00:18:45.150 --> 00:18:49.599 line:86% position:50% size:85% align:center
+Some files end a record with two bytes: carriage return, then line
+
+00:18:49.599 --> 00:18:54.699 line:86% position:50% size:85% align:center
+feed. On screen, C R and L F label those otherwise invisible
+
+00:18:54.699 --> 00:18:55.299 line:86% position:50% size:85% align:center
+bytes.
+
+00:18:56.789 --> 00:19:01.382 line:86% position:50% size:85% align:center
+Outside quotes, the carriage return finishes the last field, but our
+
+00:19:01.382 --> 00:19:05.462 line:86% position:50% size:85% align:center
+rules still require the following line feed before delivering the
+
+00:19:05.462 --> 00:19:05.802 line:86% position:50% size:85% align:center
+record.
+
+00:19:07.158 --> 00:19:11.371 line:86% position:50% size:85% align:center
+Put a chunk boundary between them. Keep the completed fields, and
+
+00:19:11.371 --> 00:19:15.471 line:86% position:50% size:85% align:center
+remember that we are waiting for line feed. Nothing is delivered
+
+00:19:15.471 --> 00:19:15.951 line:86% position:50% size:85% align:center
+twice.
+
+00:19:17.524 --> 00:19:21.337 line:86% position:50% size:85% align:center
+When line feed arrives, clear that pending flag and deliver the
+
+00:19:21.337 --> 00:19:24.457 line:86% position:50% size:85% align:center
+record once. Start the next record after the pair.
+
+00:19:25.840 --> 00:19:30.054 line:86% position:50% size:85% align:center
+This flag is separate from the four field states. It records a
+
+00:19:30.054 --> 00:19:34.254 line:86% position:50% size:85% align:center
+pending record ending, after field processing has already done its
+
+00:19:34.254 --> 00:19:34.694 line:86% position:50% size:85% align:center
+job.
+
+00:19:36.055 --> 00:19:40.684 line:86% position:50% size:85% align:center
+If another byte arrives instead, report an error at that byte. If
+
+00:19:40.684 --> 00:19:44.624 line:86% position:50% size:85% align:center
+final end arrives, report the missing line feed at final end.
+
+00:19:45.991 --> 00:19:50.563 line:86% position:50% size:85% align:center
+Inside a quoted field, both bytes are contents. The quoted path keeps
+
+00:19:50.563 --> 00:19:54.823 line:86% position:50% size:85% align:center
+them exactly. Our line-ending rule only applies outside quotes.
+
+00:19:56.950 --> 00:20:02.405 line:86% position:50% size:85% align:center
+So far, our examples used mostly one-byte letters. Now import Zoë and
+
+00:20:02.405 --> 00:20:06.825 line:86% position:50% size:85% align:center
+café. The accent is part of the value and must survive unchanged.
+
+00:20:08.586 --> 00:20:13.120 line:86% position:50% size:85% align:center
+UTF eight stores some characters in several bytes. Zoom into the
+
+00:20:13.120 --> 00:20:16.560 line:86% position:50% size:85% align:center
+final é: these two bytes belong to one character.
+
+00:20:18.059 --> 00:20:22.175 line:86% position:50% size:85% align:center
+A read may stop between them. If we turn each byte into a character
+
+00:20:22.175 --> 00:20:26.035 line:86% position:50% size:85% align:center
+immediately, we won't recover the original é correctly.
+
+00:20:27.431 --> 00:20:31.649 line:86% position:50% size:85% align:center
+Instead, keep raw content bytes in the field vector. The first byte
+
+00:20:31.649 --> 00:20:34.869 line:86% position:50% size:85% align:center
+waits there. The next chunk adds the remaining byte.
+
+00:20:36.289 --> 00:20:40.755 line:86% position:50% size:85% align:center
+When the field is complete, String from UTF eight validates the whole
+
+00:20:40.755 --> 00:20:44.047 line:86% position:50% size:85% align:center
+sequence and gives us the actual text café.
+
+00:20:45.047 --> 00:20:49.021 line:86% position:50% size:85% align:center
+We can still recognize commas and quotes while scanning. A
+
+00:20:49.021 --> 00:20:53.801 line:86% position:50% size:85% align:center
+continuation byte in UTF eight cannot be the comma byte or the quote
+
+00:20:53.801 --> 00:20:54.101 line:86% position:50% size:85% align:center
+byte.
+
+00:20:55.463 --> 00:20:59.700 line:86% position:50% size:85% align:center
+That gives us a clean boundary: the scan identifies field structure,
+
+00:21:00.320 --> 00:21:04.880 line:86% position:50% size:85% align:center
+and string conversion validates the completed text. A byte is not
+
+00:21:04.880 --> 00:21:06.220 line:86% position:50% size:85% align:center
+automatically a character.
+
+00:21:08.383 --> 00:21:12.873 line:86% position:50% size:85% align:center
+A caller needs more than something went wrong. Here the x after the
+
+00:21:12.873 --> 00:21:17.093 line:86% position:50% size:85% align:center
+closing quote violates a specific rule at a specific source position.
+
+00:21:18.528 --> 00:21:22.939 line:86% position:50% size:85% align:center
+Count source bytes from zero as push consumes them. Keep the current
+
+00:21:22.939 --> 00:21:27.019 line:86% position:50% size:85% align:center
+position before incrementing, so an error can point to the byte being
+
+00:21:27.019 --> 00:21:27.399 line:86% position:50% size:85% align:center
+examined.
+
+00:21:28.942 --> 00:21:33.582 line:86% position:50% size:85% align:center
+Store the error kind and its byte offset together. Rust's error enum
+
+00:21:33.582 --> 00:21:37.062 line:86% position:50% size:85% align:center
+names the failure; the error struct carries its location.
+
+00:21:38.652 --> 00:21:43.650 line:86% position:50% size:85% align:center
+Invalid UTF eight is detected when a field completes. Our small
+
+00:21:43.650 --> 00:21:47.210 line:86% position:50% size:85% align:center
+implementation points that error to the start of the source field,
+
+00:21:47.770 --> 00:21:49.150 line:86% position:50% size:85% align:center
+not a guessed character index.
+
+00:21:50.711 --> 00:21:54.796 line:86% position:50% size:85% align:center
+The question mark after end field means: if this operation failed,
+
+00:21:55.336 --> 00:21:59.916 line:86% position:50% size:85% align:center
+return that error now. On success, continue with the next operation.
+
+00:22:01.535 --> 00:22:05.404 line:86% position:50% size:85% align:center
+After failure or final completion, mark the decoder closed.
+
+00:22:06.564 --> 00:22:10.604 line:86% position:50% size:85% align:center
+Accidentally feeding it again produces a closed error instead of
+
+00:22:10.604 --> 00:22:12.704 line:86% position:50% size:85% align:center
+continuing from damaged partial work.
+
+00:22:14.082 --> 00:22:17.958 line:86% position:50% size:85% align:center
+The application can choose how to display the error. The parser
+
+00:22:17.958 --> 00:22:22.198 line:86% position:50% size:85% align:center
+supplies structured facts. It doesn't print a message or terminate
+
+00:22:22.198 --> 00:22:23.438 line:86% position:50% size:85% align:center
+the process itself.
+
+00:22:25.650 --> 00:22:29.734 line:86% position:50% size:85% align:center
+Now test the promise we've been making. This small record has an
+
+00:22:29.734 --> 00:22:34.034 line:86% position:50% size:85% align:center
+escaped quote, a multibyte character, and a two-byte line ending.
+
+00:22:35.455 --> 00:22:39.582 line:86% position:50% size:85% align:center
+Feed the entire byte sequence to one decoder. Save the delivered
+
+00:22:39.582 --> 00:22:42.842 line:86% position:50% size:85% align:center
+record and any error. That's our reference result.
+
+00:22:44.304 --> 00:22:48.191 line:86% position:50% size:85% align:center
+Then cut after the first byte. Feed the two pieces to a fresh
+
+00:22:48.191 --> 00:22:51.011 line:86% position:50% size:85% align:center
+decoder. Compare the result with the reference.
+
+00:22:52.505 --> 00:22:56.250 line:86% position:50% size:85% align:center
+Move the cut one byte at a time through the whole source, including
+
+00:22:56.250 --> 00:23:01.410 line:86% position:50% size:85% align:center
+between quotes, inside é, and between carriage return and line feed.
+
+00:23:02.866 --> 00:23:07.054 line:86% position:50% size:85% align:center
+Finally, feed one byte per chunk. There is still only one call to
+
+00:23:07.054 --> 00:23:09.374 line:86% position:50% size:85% align:center
+finish, after all the chunks have arrived.
+
+00:23:10.765 --> 00:23:15.277 line:86% position:50% size:85% align:center
+Do the same with malformed inputs. The error kind and source offset
+
+00:23:15.277 --> 00:23:19.397 line:86% position:50% size:85% align:center
+must stay the same too. Delivery boundaries shouldn't change the
+
+00:23:19.397 --> 00:23:19.797 line:86% position:50% size:85% align:center
+diagnosis.
+
+00:23:21.528 --> 00:23:26.492 line:86% position:50% size:85% align:center
+This is a useful test pattern beyond C S V: vary how input is
+
+00:23:26.492 --> 00:23:31.092 line:86% position:50% size:85% align:center
+delivered while keeping its content fixed. The logical result should
+
+00:23:31.092 --> 00:23:31.792 line:86% position:50% size:85% align:center
+remain stable.
+
+00:23:35.883 --> 00:23:40.371 line:86% position:50% size:85% align:center
+The decoder understands bytes. But an application usually wants a
+
+00:23:40.371 --> 00:23:44.331 line:86% position:50% size:85% align:center
+complete record: the next shopper, with all that shopper's fields
+
+00:23:44.331 --> 00:23:44.811 line:86% position:50% size:85% align:center
+together.
+
+00:23:46.236 --> 00:23:50.088 line:86% position:50% size:85% align:center
+Let the application ask for the next record. The reader consumes
+
+00:23:50.088 --> 00:23:54.608 line:86% position:50% size:85% align:center
+input until the decoder produces one, then hands that record over.
+
+00:23:55.960 --> 00:24:00.884 line:86% position:50% size:85% align:center
+Mira and tea are ready. Return them now. The application can process
+
+00:24:00.884 --> 00:24:04.224 line:86% position:50% size:85% align:center
+that shopper before we've parsed every shopper in the file.
+
+00:24:05.602 --> 00:24:09.749 line:86% position:50% size:85% align:center
+Some input may already be buffered after Mira's line. Keep those
+
+00:24:09.749 --> 00:24:14.869 line:86% position:50% size:85% align:center
+unread bytes. Asking for one record doesn't mean the operating system
+
+00:24:14.869 --> 00:24:17.009 line:86% position:50% size:85% align:center
+supplied exactly one record.
+
+00:24:18.381 --> 00:24:23.269 line:86% position:50% size:85% align:center
+On the next request, resume at the first unread byte. Noah and milk
+
+00:24:23.269 --> 00:24:26.609 line:86% position:50% size:85% align:center
+become the next record, using the same decoder instance.
+
+00:24:28.136 --> 00:24:32.572 line:86% position:50% size:85% align:center
+This avoids collecting the entire file inside the reader. It still
+
+00:24:32.572 --> 00:24:36.792 line:86% position:50% size:85% align:center
+needs an input buffer and space for the record currently being built.
+
+00:24:38.146 --> 00:24:42.435 line:86% position:50% size:85% align:center
+A single enormous quoted record can still be enormous in memory.
+
+00:24:43.315 --> 00:24:47.595 line:86% position:50% size:85% align:center
+Streaming means incremental delivery here; it doesn't make the size
+
+00:24:47.595 --> 00:24:48.755 line:86% position:50% size:85% align:center
+of a record disappear.
+
+00:24:50.983 --> 00:24:55.123 line:86% position:50% size:85% align:center
+What does a read actually give us? We provide a byte buffer. The
+
+00:24:55.123 --> 00:24:58.263 line:86% position:50% size:85% align:center
+input source reports how many positions it filled this time.
+
+00:24:59.623 --> 00:25:03.822 line:86% position:50% size:85% align:center
+That count can be smaller than the buffer's capacity. Only the filled
+
+00:25:03.822 --> 00:25:08.442 line:86% position:50% size:85% align:center
+prefix is valid input; the unused positions must not be scanned.
+
+00:25:09.867 --> 00:25:14.990 line:86% position:50% size:85% align:center
+Keep two indexes: pos, the next unread position, and len, the end of
+
+00:25:14.990 --> 00:25:18.770 line:86% position:50% size:85% align:center
+the filled prefix. Advance pos after taking one byte.
+
+00:25:20.154 --> 00:25:24.684 line:86% position:50% size:85% align:center
+A record can finish before pos reaches len. Return the record and
+
+00:25:24.684 --> 00:25:28.224 line:86% position:50% size:85% align:center
+keep both indexes, so the remaining input stays available.
+
+00:25:29.721 --> 00:25:34.258 line:86% position:50% size:85% align:center
+When pos equals len, the filled prefix is exhausted. Read again,
+
+00:25:34.778 --> 00:25:37.958 line:86% position:50% size:85% align:center
+reset pos to zero, and set len to the new byte count.
+
+00:25:39.327 --> 00:25:43.617 line:86% position:50% size:85% align:center
+In this blocking reader, a successful read of zero bytes means final
+
+00:25:43.617 --> 00:25:47.517 line:86% position:50% size:85% align:center
+end of input. That's when we call the decoder's finish method.
+
+00:25:48.943 --> 00:25:53.596 line:86% position:50% size:85% align:center
+The I O layer decides which bytes are available. The decoder decides
+
+00:25:53.596 --> 00:25:57.796 line:86% position:50% size:85% align:center
+where records end. Neither layer should pretend those boundaries are
+
+00:25:57.796 --> 00:25:58.216 line:86% position:50% size:85% align:center
+the same.
+
+00:26:00.283 --> 00:26:04.399 line:86% position:50% size:85% align:center
+Rust's Iterator interface matches the way the application is asking:
+
+00:26:05.359 --> 00:26:08.459 line:86% position:50% size:85% align:center
+give me the next item, or tell me there are no more items.
+
+00:26:10.006 --> 00:26:14.978 line:86% position:50% size:85% align:center
+Our item is itself a Result. A successful item holds one record.
+
+00:26:15.818 --> 00:26:19.278 line:86% position:50% size:85% align:center
+A failed item holds an error encountered while trying to get that
+
+00:26:19.278 --> 00:26:19.658 line:86% position:50% size:85% align:center
+record.
+
+00:26:21.043 --> 00:26:25.135 line:86% position:50% size:85% align:center
+So Some of Ok means here's a record. Some of Err means here's a
+
+00:26:25.135 --> 00:26:27.975 line:86% position:50% size:85% align:center
+failure. None means the iteration is finished.
+
+00:26:29.479 --> 00:26:33.956 line:86% position:50% size:85% align:center
+That None has a different job from the decoder's successful None. The
+
+00:26:33.956 --> 00:26:37.996 line:86% position:50% size:85% align:center
+decoder means this byte hasn't completed a record yet. The iterator
+
+00:26:37.996 --> 00:26:39.196 line:86% position:50% size:85% align:center
+must keep working.
+
+00:26:40.580 --> 00:26:45.313 line:86% position:50% size:85% align:center
+Its loop reads or takes another buffered byte, feeds the decoder, and
+
+00:26:45.313 --> 00:26:49.573 line:86% position:50% size:85% align:center
+repeats until a record, an error, or final completion is available.
+
+00:26:51.080 --> 00:26:55.606 line:86% position:50% size:85% align:center
+The associated Item type describes what each successful call to next
+
+00:26:55.606 --> 00:27:00.366 line:86% position:50% size:85% align:center
+can yield. The next method borrows the reader mutably because it
+
+00:27:00.366 --> 00:27:01.486 line:86% position:50% size:85% align:center
+advances that reader.
+
+00:27:02.893 --> 00:27:08.092 line:86% position:50% size:85% align:center
+An empty input gives None immediately after final completion. A blank
+
+00:27:08.092 --> 00:27:12.872 line:86% position:50% size:85% align:center
+line gives Some of Ok containing one empty field, then eventually
+
+00:27:12.872 --> 00:27:13.232 line:86% position:50% size:85% align:center
+None.
+
+00:27:15.283 --> 00:27:19.725 line:86% position:50% size:85% align:center
+Let's execute one next call. The buffer starts empty, so the reader
+
+00:27:19.725 --> 00:27:24.745 line:86% position:50% size:85% align:center
+fills it. The filled prefix happens to contain Mira's whole line and
+
+00:27:24.745 --> 00:27:25.625 line:86% position:50% size:85% align:center
+part of Noah's.
+
+00:27:26.878 --> 00:27:31.586 line:86% position:50% size:85% align:center
+Take M, then i, r, and a. Each push succeeds without producing a
+
+00:27:31.586 --> 00:27:33.746 line:86% position:50% size:85% align:center
+record. The next loop keeps going.
+
+00:27:35.086 --> 00:27:39.578 line:86% position:50% size:85% align:center
+The comma finishes Mira's field, but the record is incomplete. Still
+
+00:27:39.578 --> 00:27:43.058 line:86% position:50% size:85% align:center
+no item to return. Tea fills the second field.
+
+00:27:44.421 --> 00:27:49.394 line:86% position:50% size:85% align:center
+The line feed finishes tea and the record. Push now returns a ready
+
+00:27:49.394 --> 00:27:53.354 line:86% position:50% size:85% align:center
+record. Next immediately returns that record to the application.
+
+00:27:54.926 --> 00:28:00.353 line:86% position:50% size:85% align:center
+Notice where pos stopped: at Noah's first unread byte. The buffer and
+
+00:28:00.353 --> 00:28:03.933 line:86% position:50% size:85% align:center
+its indexes remain inside the reader after the function returns.
+
+00:28:05.477 --> 00:28:09.506 line:86% position:50% size:85% align:center
+A later next call resumes there. If that prefix runs out mid-field,
+
+00:28:10.466 --> 00:28:13.706 line:86% position:50% size:85% align:center
+the loop reads another chunk while the decoder preserves the partial
+
+00:28:13.706 --> 00:28:14.206 line:86% position:50% size:85% align:center
+field.
+
+00:28:15.629 --> 00:28:19.440 line:86% position:50% size:85% align:center
+That's the composition: the outer loop waits for a useful result,
+
+00:28:19.800 --> 00:28:24.420 line:86% position:50% size:85% align:center
+while the inner decoder handles one byte at a time. Each has a small,
+
+00:28:24.620 --> 00:28:25.640 line:86% position:50% size:85% align:center
+explicit job.
+
+00:28:27.783 --> 00:28:32.172 line:86% position:50% size:85% align:center
+What if the last record has no line ending? The loop consumes tea,
+
+00:28:32.572 --> 00:28:35.472 line:86% position:50% size:85% align:center
+but it still hasn't received a complete record from push.
+
+00:28:36.938 --> 00:28:41.900 line:86% position:50% size:85% align:center
+The next read returns zero. Now call finish. The decoder completes
+
+00:28:41.900 --> 00:28:44.620 line:86% position:50% size:85% align:center
+the last field and gives us the final record.
+
+00:28:46.022 --> 00:28:50.167 line:86% position:50% size:85% align:center
+Mark the iterator done before returning it. A later call to next
+
+00:28:50.167 --> 00:28:54.607 line:86% position:50% size:85% align:center
+returns None immediately. It doesn't call finish a second time.
+
+00:28:55.946 --> 00:29:00.326 line:86% position:50% size:85% align:center
+A syntax error follows the same stopping rule: return the error once,
+
+00:29:00.806 --> 00:29:04.606 line:86% position:50% size:85% align:center
+then stop. Earlier records already delivered to the application
+
+00:29:04.606 --> 00:29:05.706 line:86% position:50% size:85% align:center
+remain valid.
+
+00:29:07.097 --> 00:29:11.699 line:86% position:50% size:85% align:center
+Reading can fail too. An interrupted read is retried. Other read
+
+00:29:11.699 --> 00:29:16.934 line:86% position:50% size:85% align:center
+failures become I O errors, distinguished from malformed C S V.
+
+00:29:17.934 --> 00:29:22.481 line:86% position:50% size:85% align:center
+The wrapper enum keeps those two error sources separate. Formatting
+
+00:29:22.481 --> 00:29:27.041 line:86% position:50% size:85% align:center
+an error produces readable text; the stored error still carries its
+
+00:29:27.041 --> 00:29:28.501 line:86% position:50% size:85% align:center
+original structured information.
+
+00:29:30.187 --> 00:29:33.571 line:86% position:50% size:85% align:center
+The reader never invents an empty record to represent a failure.
+
+00:29:34.631 --> 00:29:39.131 line:86% position:50% size:85% align:center
+Data, failure, and final completion each have their own return shape.
+
+00:29:41.150 --> 00:29:45.613 line:86% position:50% size:85% align:center
+We've used a byte slice so the examples stay small. Replace it with
+
+00:29:45.613 --> 00:29:50.393 line:86% position:50% size:85% align:center
+an opened file, and the C S V decisions should stay exactly the same.
+
+00:29:51.785 --> 00:29:55.785 line:86% position:50% size:85% align:center
+The reader asks for the Read capability: something that can fill a
+
+00:29:55.785 --> 00:29:59.245 line:86% position:50% size:85% align:center
+byte buffer. It doesn't need to know how that source stores its
+
+00:29:59.245 --> 00:29:59.485 line:86% position:50% size:85% align:center
+bytes.
+
+00:30:00.999 --> 00:30:06.292 line:86% position:50% size:85% align:center
+In Records of R, R is the chosen source type. The bound R colon
+
+00:30:06.292 --> 00:30:09.972 line:86% position:50% size:85% align:center
+Read tells Rust which operation this reader needs from that type.
+
+00:30:11.374 --> 00:30:16.346 line:86% position:50% size:85% align:center
+Our tests supply tiny reads on purpose. The same adapter runs against
+
+00:30:16.346 --> 00:30:20.746 line:86% position:50% size:85% align:center
+a file or the test source, and the decoder still sees one byte at a
+
+00:30:20.746 --> 00:30:21.106 line:86% position:50% size:85% align:center
+time.
+
+00:30:22.428 --> 00:30:26.710 line:86% position:50% size:85% align:center
+This abstraction pays for itself here: we can change delivery and
+
+00:30:26.710 --> 00:30:31.110 line:86% position:50% size:85% align:center
+test failures without changing quotation rules or field building.
+
+00:30:32.461 --> 00:30:37.290 line:86% position:50% size:85% align:center
+It is a blocking adapter. A nonblocking source that temporarily has
+
+00:30:37.290 --> 00:30:41.750 line:86% position:50% size:85% align:center
+no data needs a different waiting interface; we don't pretend its
+
+00:30:41.750 --> 00:30:43.710 line:86% position:50% size:85% align:center
+temporary state is final end.
+
+00:30:45.107 --> 00:30:48.857 line:86% position:50% size:85% align:center
+The complete source checkpoint includes initialization, error
+
+00:30:48.857 --> 00:30:53.077 line:86% position:50% size:85% align:center
+formatting, and the finished loop. The active path we've just
+
+00:30:53.077 --> 00:30:55.397 line:86% position:50% size:85% align:center
+followed is the same path in that code.
+
+00:30:59.450 --> 00:31:04.138 line:86% position:50% size:85% align:center
+Suppose these records have a name and a quantity. The parser returns
+
+00:31:04.138 --> 00:31:08.798 line:86% position:50% size:85% align:center
+the text one two, which the application still needs to interpret as a
+
+00:31:08.798 --> 00:31:09.158 line:86% position:50% size:85% align:center
+quantity.
+
+00:31:10.618 --> 00:31:15.375 line:86% position:50% size:85% align:center
+Is the first row a header? The C S V core doesn't guess. The
+
+00:31:15.375 --> 00:31:19.095 line:86% position:50% size:85% align:center
+application can take the first record as names because its own
+
+00:31:19.095 --> 00:31:20.135 line:86% position:50% size:85% align:center
+contract says so.
+
+00:31:21.474 --> 00:31:25.498 line:86% position:50% size:85% align:center
+Does every later row need exactly two fields? That's another
+
+00:31:25.498 --> 00:31:29.978 line:86% position:50% size:85% align:center
+application rule. Our core can recognize a record even when its field
+
+00:31:29.978 --> 00:31:30.638 line:86% position:50% size:85% align:center
+count differs.
+
+00:31:32.153 --> 00:31:35.864 line:86% position:50% size:85% align:center
+The application checks the field count, then converts the quantity
+
+00:31:35.864 --> 00:31:40.444 line:86% position:50% size:85% align:center
+string to an integer. A negative quantity might parse as an integer
+
+00:31:41.084 --> 00:31:43.284 line:86% position:50% size:85% align:center
+but still violate this application's rules.
+
+00:31:44.777 --> 00:31:49.362 line:86% position:50% size:85% align:center
+Those failures are not quote errors. Keep format errors, number
+
+00:31:49.362 --> 00:31:53.662 line:86% position:50% size:85% align:center
+conversion errors, and domain rule failures distinguishable so
+
+00:31:53.662 --> 00:31:55.242 line:86% position:50% size:85% align:center
+callers can respond correctly.
+
+00:31:56.764 --> 00:32:00.970 line:86% position:50% size:85% align:center
+The parser's output is the boundary: complete text fields grouped
+
+00:32:00.970 --> 00:32:06.150 line:86% position:50% size:85% align:center
+into records. Application code builds meaning from those values after
+
+00:32:06.150 --> 00:32:07.470 line:86% position:50% size:85% align:center
+the format is understood.
+
+00:32:08.972 --> 00:32:13.975 line:86% position:50% size:85% align:center
+Change the second column to a shopping note. The C S V reader stays
+
+00:32:13.975 --> 00:32:17.775 line:86% position:50% size:85% align:center
+the same. Only the application's interpretation changes.
+
+00:32:19.983 --> 00:32:24.920 line:86% position:50% size:85% align:center
+Time for a fresh example. The first record starts with A. Its note
+
+00:32:24.920 --> 00:32:29.660 line:86% position:50% size:85% align:center
+contains quotation marks, an accented character, a comma, and a line
+
+00:32:29.660 --> 00:32:29.940 line:86% position:50% size:85% align:center
+break.
+
+00:32:31.351 --> 00:32:35.123 line:86% position:50% size:85% align:center
+Before we run it, look at the quotes and separators. How many fields
+
+00:32:35.123 --> 00:32:39.043 line:86% position:50% size:85% align:center
+will the first record have? Take a moment; we'll show the complete
+
+00:32:39.043 --> 00:32:39.503 line:86% position:50% size:85% align:center
+answer.
+
+00:32:42.971 --> 00:32:47.388 line:86% position:50% size:85% align:center
+The comma after A finishes field one. An opening quote begins the
+
+00:32:47.388 --> 00:32:51.048 line:86% position:50% size:85% align:center
+note. The next two quotes contribute one quote to its contents.
+
+00:32:52.647 --> 00:32:58.044 line:86% position:50% size:85% align:center
+Café follows, including the two-byte é. Another doubled quote adds a
+
+00:32:58.044 --> 00:33:02.424 line:86% position:50% size:85% align:center
+closing quote inside the note. The comma and line break still belong
+
+00:33:02.424 --> 00:33:03.124 line:86% position:50% size:85% align:center
+to that note.
+
+00:33:04.516 --> 00:33:08.368 line:86% position:50% size:85% align:center
+Next completes the note's second line. The closing quote leaves
+
+00:33:08.368 --> 00:33:13.148 line:86% position:50% size:85% align:center
+quoted contents, and the comma finishes that field. There's now a
+
+00:33:13.148 --> 00:33:14.408 line:86% position:50% size:85% align:center
+final empty field.
+
+00:33:15.760 --> 00:33:19.591 line:86% position:50% size:85% align:center
+Carriage return plus line feed finishes the first record with three
+
+00:33:19.591 --> 00:33:24.451 line:86% position:50% size:85% align:center
+fields. B, an empty middle field, and done form the next
+
+00:33:24.451 --> 00:33:25.471 line:86% position:50% size:85% align:center
+three-field record.
+
+00:33:26.884 --> 00:33:30.943 line:86% position:50% size:85% align:center
+Compare the table with the source. Every content character has a
+
+00:33:30.943 --> 00:33:35.563 line:86% position:50% size:85% align:center
+destination. Format quotes and separators did their jobs without
+
+00:33:35.563 --> 00:33:37.463 line:86% position:50% size:85% align:center
+becoming extra field contents.
+
+00:33:39.717 --> 00:33:44.579 line:86% position:50% size:85% align:center
+Keep that exact input and exact expected table. Now split the
+
+00:33:44.579 --> 00:33:49.539 line:86% position:50% size:85% align:center
+delivery between a quote pair, inside é, and between carriage return
+
+00:33:49.539 --> 00:33:50.499 line:86% position:50% size:85% align:center
+and line feed.
+
+00:33:51.977 --> 00:33:55.956 line:86% position:50% size:85% align:center
+At the split quote, retain Quote Seen. When the next quote arrives,
+
+00:33:55.956 --> 00:33:58.756 line:86% position:50% size:85% align:center
+append one quote and resume quoted contents.
+
+00:34:00.340 --> 00:34:04.752 line:86% position:50% size:85% align:center
+At the split character, retain the raw field bytes. Completing the
+
+00:34:04.752 --> 00:34:08.412 line:86% position:50% size:85% align:center
+byte sequence later lets the field convert to the same text.
+
+00:34:09.838 --> 00:34:14.108 line:86% position:50% size:85% align:center
+At the split line ending, retain the pending line-feed flag and the
+
+00:34:14.108 --> 00:34:17.848 line:86% position:50% size:85% align:center
+completed fields. Deliver the record when line feed arrives.
+
+00:34:19.415 --> 00:34:23.891 line:86% position:50% size:85% align:center
+The finished table is unchanged. What crossed each pause was the
+
+00:34:23.891 --> 00:34:27.251 line:86% position:50% size:85% align:center
+small amount of context needed to finish the current decision.
+
+00:34:28.727 --> 00:34:33.562 line:86% position:50% size:85% align:center
+Move the cuts again, or feed one byte at a time. Our tests check that
+
+00:34:33.562 --> 00:34:37.162 line:86% position:50% size:85% align:center
+the delivered records and any error position remain identical.
+
+00:34:38.599 --> 00:34:42.765 line:86% position:50% size:85% align:center
+When input delivery changes, keep logical boundaries under the
+
+00:34:42.765 --> 00:34:47.705 line:86% position:50% size:85% align:center
+parser's control. Remember unresolved work, rather than letting the
+
+00:34:47.705 --> 00:34:49.705 line:86% position:50% size:85% align:center
+transport decide what a value means.
+
+00:34:51.850 --> 00:34:55.643 line:86% position:50% size:85% align:center
+Where else does this way of thinking help? Imagine a message stream
+
+00:34:55.643 --> 00:34:59.223 line:86% position:50% size:85% align:center
+that gives a length first, followed by that many message bytes.
+
+00:35:00.723 --> 00:35:04.093 line:86% position:50% size:85% align:center
+A read could stop halfway through the length or halfway through the
+
+00:35:04.093 --> 00:35:08.453 line:86% position:50% size:85% align:center
+message. Again, the read boundary is not the message boundary.
+
+00:35:09.934 --> 00:35:14.086 line:86% position:50% size:85% align:center
+That parser would remember an unfinished length or how many message
+
+00:35:14.086 --> 00:35:19.226 line:86% position:50% size:85% align:center
+bytes remain. It wouldn't need C S V's quoted and bare field states.
+
+00:35:20.723 --> 00:35:25.947 line:86% position:50% size:85% align:center
+The reusable idea is to identify what makes a result complete, then
+
+00:35:25.947 --> 00:35:29.807 line:86% position:50% size:85% align:center
+retain the context needed to reach that point across incomplete
+
+00:35:29.807 --> 00:35:30.627 line:86% position:50% size:85% align:center
+deliveries.
+
+00:35:32.265 --> 00:35:36.525 line:86% position:50% size:85% align:center
+Give each component a small job with a clear handoff. The source
+
+00:35:36.525 --> 00:35:40.725 line:86% position:50% size:85% align:center
+supplies bytes, the format parser supplies values, and the
+
+00:35:40.725 --> 00:35:42.765 line:86% position:50% size:85% align:center
+application gives those values meaning.
+
+00:35:44.241 --> 00:35:48.448 line:86% position:50% size:85% align:center
+Then test the boundary by changing delivery without changing content.
+
+00:35:49.388 --> 00:35:53.328 line:86% position:50% size:85% align:center
+It's a direct way to catch assumptions that were accidentally hidden
+
+00:35:53.328 --> 00:35:55.428 line:86% position:50% size:85% align:center
+in the first happy-path example.
+
+00:35:56.850 --> 00:36:01.213 line:86% position:50% size:85% align:center
+Different formats have different completion rules. Reuse the method
+
+00:36:01.213 --> 00:36:05.493 line:86% position:50% size:85% align:center
+of finding and preserving those rules, not a state machine copied
+
+00:36:05.493 --> 00:36:06.713 line:86% position:50% size:85% align:center
+from the wrong problem.
+
+00:36:08.783 --> 00:36:13.129 line:86% position:50% size:85% align:center
+Return to Mira's shopping note one last time. We started with three
+
+00:36:13.129 --> 00:36:17.849 line:86% position:50% size:85% align:center
+broken pieces. Now the same input becomes the two intended fields.
+
+00:36:19.396 --> 00:36:23.967 line:86% position:50% size:85% align:center
+We built that result from small decisions: keep content, finish a
+
+00:36:23.967 --> 00:36:28.167 line:86% position:50% size:85% align:center
+field, finish a record, and change how punctuation is interpreted
+
+00:36:28.167 --> 00:36:29.907 line:86% position:50% size:85% align:center
+when quoting requires it.
+
+00:36:31.203 --> 00:36:35.173 line:86% position:50% size:85% align:center
+The difficult moments told us what to remember. Quote Seen preserves
+
+00:36:35.173 --> 00:36:40.573 line:86% position:50% size:85% align:center
+an unresolved quote. Field bytes preserve unfinished text. The
+
+00:36:40.573 --> 00:36:42.693 line:86% position:50% size:85% align:center
+record keeps fields that belong together.
+
+00:36:44.083 --> 00:36:47.944 line:86% position:50% size:85% align:center
+The reader carries that work across reads and hands over one
+
+00:36:47.944 --> 00:36:52.824 line:86% position:50% size:85% align:center
+completed record at a time. Its buffer boundary never pretends to be
+
+00:36:52.824 --> 00:36:54.244 line:86% position:50% size:85% align:center
+a C S V boundary.
+
+00:36:55.653 --> 00:36:59.401 line:86% position:50% size:85% align:center
+The linked source includes the runnable checkpoints, complete reader,
+
+00:37:00.061 --> 00:37:04.881 line:86% position:50% size:85% align:center
+format policy, and boundary tests. The transcript and chapters let
+
+00:37:04.881 --> 00:37:06.801 line:86% position:50% size:85% align:center
+you return to a specific decision.
+
+00:37:08.206 --> 00:37:12.327 line:86% position:50% size:85% align:center
+To extend this reader, begin with a small input and the result you
+
+00:37:12.327 --> 00:37:16.907 line:86% position:50% size:85% align:center
+want. Trace the new decision, then add only the state needed to make
+
+00:37:16.907 --> 00:37:17.307 line:86% position:50% size:85% align:center
+it correctly.
+
+00:37:18.859 --> 00:37:23.067 line:86% position:50% size:85% align:center
+That's the finished path from text to useful records. The comma
+
+00:37:23.067 --> 00:37:26.947 line:86% position:50% size:85% align:center
+didn't change. We learned to keep the context that tells us what it
+
+00:37:26.947 --> 00:37:27.147 line:86% position:50% size:85% align:center
+means.
